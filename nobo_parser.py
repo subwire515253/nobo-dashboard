@@ -46,7 +46,7 @@ def parse_nobo_file(uploaded_file):
     # Extract city, state, zip, country
     sheet['City'] = sheet['Full Address'].str.extract(r'([A-Za-z\s]+),')
     sheet['State'] = sheet['Full Address'].str.extract(r',\s*([A-Z]{2})\s')
-    sheet['Zip Code'] = sheet['Full Address'].str.extract(r'(\d{5}(-\d{4})?)')
+    sheet['Zip Code'] = sheet['Full Address'].str.extract(r'(\d{5}(?:-\d{4})?)')
     sheet['Country'] = sheet['Full Address'].str.extract(r'(USA|Canada|United Kingdom|UAE|India|Singapore|Hong Kong)', expand=False)
 
     # Holder type tagging
