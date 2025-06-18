@@ -2,7 +2,7 @@
 import pandas as pd
 from fuzzywuzzy import fuzz
 
-def match_names(nobo_df, sec_df, name_field="Full Address", threshold=85):
+def match_names(nobo_df, sec_df, name_field="full_address", threshold=85):
     matches = []
     nobo_names = nobo_df[name_field].str.lower().fillna("")
     for idx, row in sec_df.iterrows():
