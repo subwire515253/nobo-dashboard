@@ -1,37 +1,47 @@
+# sec_scraper.py
 
 import requests
 import pandas as pd
+from bs4 import BeautifulSoup
+from datetime import datetime
+import time
+
+headers = {
+    "User-Agent": "ShareholderDashboard/1.0 (contact@yourdomain.com)",
+    "Accept-Encoding": "gzip, deflate",
+    "Host": "www.sec.gov"
+}
 
 def fetch_sec_data(ticker):
-    cik_lookup_url = f"https://www.sec.gov/files/company_tickers.json"
-    cik_data = requests.get(cik_lookup_url).json()
+    base_url = "https://data.sec.gov"
+    cik_lookup_url = "https://www.sec.gov/files/company_tickers.json"
 
-    matched = None
-    for entry in cik_data.values():
-        if entry["ticker"].lower() == ticker.lower():
-            matched = entry
-            break
-    if not matched:
+    try:
+        response = requests.get(cik_lookup_url, headers=headers)
+        data = response.json()
+        cik_entry = next((entry for entry in data.values() if entry["ticker"].upper() == ticker.upper()), None)
+        if not cik_entry:
+            raise ValueError("CIK not found for ticker.")
+
+        cik = str(cik_entry["cik_str"]).zfill(10)
+    except Exception as e:
+        print(f"Error fetching CIK: {e}")
         return {}
 
-    cik = str(matched["cik_str"]).zfill(10)
-    forms_to_fetch = ["S-1", "F-1", "4", "SC 13D"]
+    forms_to_scrape = ["S-1", "F-1", "4", "SC 13D"]
+    filings_url = f"{base_url}/submissions/CIK{cik}.json"
 
-    def fetch_filings(cik, form):
-        url = f"https://data.sec.gov/submissions/CIK{cik}.json"
-        headers = {"User-Agent": "NOBO Intelligence"}
-        resp = requests.get(url, headers=headers)
-        if not resp.ok:
-            return pd.DataFrame()
+    try:
+        filings_resp = requests.get(filings_url, headers=headers).json()
+    except Exception as e:
+        print(f"Error fetching filings JSON: {e}")
+        return {}
 
-        data = resp.json()
-        recent = data.get("filings", {}).get("recent", {})
-        df = pd.DataFrame(recent)
-        df = df[df["form"] == form]
-        df['url'] = df.apply(lambda row: f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{row['accessionNumber'].replace('-', '')}/{row['primaryDocument']}", axis=1)
-        return df[["form", "filingDate", "url", "companyName", "accessionNumber", "primaryDocument"]]
+    sec_data = {}
+    if "filings" not in filings_resp:
+        return {}
 
-    filings = {}
-    for form in forms_to_fetch:
-        filings[form] = fetch_filings(cik, form)
-    return filings
+    for form in forms_to_scrape:
+        entries = [
+            f for f in filings_resp["filings"]["recent"]["form"]
+            if f.upper()
