@@ -10,7 +10,8 @@ def parse_nobo_file(uploaded_file):
     sheet = sheet.loc[:, ~sheet.columns.str.contains('^Unnamed')]
 
     # Rename expected columns
-    sheet.columns = ['Shares', 'Name', 'Address1', 'Address2', 'Address3', 'Address4', 'Address5']
+    expected_cols = ['Shares', 'Name', 'Address1', 'Address2', 'Address3', 'Address4', 'Address5']
+    sheet.columns = expected_cols + list(sheet.columns[len(expected_cols):])
     sheet = sheet.dropna(subset=["Shares"])
     sheet = sheet.reset_index(drop=True)
 
