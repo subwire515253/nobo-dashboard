@@ -25,4 +25,35 @@ def fetch_sec_data(ticker):
         return {}
 
     filings_url = f"{base_url}/submissions/CIK{cik}.json"
-    tr
+    try:
+        filings_resp = requests.get(filings_url, headers=headers).json()
+    except Exception as e:
+        print(f"Error fetching filings: {e}")
+        return {}
+
+    sec_data = {}
+    if "filings" not in filings_resp or "recent" not in filings_resp["filings"]:
+        return {}
+
+    recent = filings_resp["filings"]["recent"]
+    forms_to_scrape = ["S-1", "F-1", "4", "SC 13D"]
+
+    for form in forms_to_scrape:
+        idxs = [i for i, f in enumerate(recent["form"]) if f.upper() == form]
+        rows = []
+        for i in idxs:
+            try:
+                acc = recent["accessionNumber"][i]
+                doc = recent["primaryDocument"][i]
+                url = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc.replace('-', '')}/{doc}"
+                rows.append({
+                    "accession": acc,
+                    "primary_doc": doc,
+                    "filing_date": recent["filingDate"][i],
+                    "url": url
+                })
+            except Exception as e:
+                continue
+        sec_data[form] = pd.DataFrame(rows)
+
+    return sec_data
