@@ -24,24 +24,23 @@ def extract_zip(address):
 
 def parse_nobo_file(uploaded_file):
     xls = pd.ExcelFile(uploaded_file)
-    sheet = xls.parse("DigiAsia - Broadridge NOBO LIST", skiprows=2)
-
-    # Normalize column names
+    sheet = xls.parse(xls.sheet_names[0], skiprows=2)  # Auto-pick first sheet
     sheet.columns = [str(c).strip().lower() for c in sheet.columns]
 
-    # Attempt to find the share count column
-    share_col = None
-    for candidate in ["total shares held", "shares", "share count"]:
-        if candidate in sheet.columns:
-            share_col = candidate
-            break
-
+    # Try to find a column that contains 'share'
+    share_col = next((col for col in sheet.columns if 'share' in col), None)
     if not share_col:
-        raise ValueError("Could not locate the share count column in uploaded file.")
+        raise ValueError(f"Could not locate a share column. Found columns: {sheet.columns.tolist()}")
+
+    # Try to build full address
+    address_fields = [col for col in sheet.columns if "address" in col and "line" in col]
+    if not address_fields:
+        raise ValueError("Could not locate address columns.")
 
     sheet = sheet.dropna(subset=[share_col])
-    sheet["Full Address"] = sheet[["name and address line 1", "name and address line 2", "name and address line 3"]].fillna("").agg(" ".join, axis=1).str.strip()
+    sheet["Full Address"] = sheet[address_fields].fillna("").agg(" ".join, axis=1).str.strip()
     sheet["Zip Code"] = sheet["Full Address"].apply(extract_zip)
     sheet["Shares"] = pd.to_numeric(sheet[share_col], errors='coerce')
     sheet["Holder Type"] = sheet.apply(lambda row: classify_holder(row["Full Address"], row["Shares"]), axis=1)
+
     return sheet[["Full Address", "Zip Code", "Shares", "Holder Type"]].dropna(subset=["Shares"])
