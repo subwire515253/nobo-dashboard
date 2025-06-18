@@ -6,3 +6,4 @@ beautifulsoup4
 fuzzywuzzy
 python-Levenshtein
 openpyxl
+seaborn
