@@ -1,9 +1,7 @@
-# app.py (risk visuals + institution/retail grouping + zip/state filter)
+# app.py (final version with NOBO/OBO summary integration)
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime
 from nobo_parser import parse_nobo_file
 from sec_scraper import fetch_sec_data
 from alerts import generate_alerts
@@ -18,7 +16,7 @@ ticker = st.text_input("Enter Ticker Symbol (for SEC scraping)", "FAAS")
 
 if uploaded_file:
     st.subheader("📋 Parsed NOBO Data")
-    nobo_df = parse_nobo_file(uploaded_file)
+    nobo_df, summary_nobo_df, summary_obo_df = parse_nobo_file(uploaded_file)
     st.dataframe(nobo_df)
 
     col1, col2 = st.columns(2)
@@ -29,6 +27,34 @@ if uploaded_file:
 
     csv = export_csv(nobo_df)
     st.download_button("⬇️ Download Cleaned NOBO CSV", csv, "nobo_clean.csv", "text/csv")
+
+    # Show NOBO/OBO Summary Tabs
+    st.subheader("📊 Share Range Summary (NOBO Holders)")
+    st.dataframe(summary_nobo_df)
+
+    st.subheader("📊 Share Range Summary (OBO Holders)")
+    st.dataframe(summary_obo_df)
+
+    # Visualize share ranges
+    if 'Share Range' in summary_nobo_df.columns and '# of Holders' in summary_nobo_df.columns:
+        try:
+            fig, ax = plt.subplots()
+            summary_nobo_df.plot(kind='bar', x='Share Range', y='# of Holders', ax=ax, color='skyblue', legend=False)
+            ax.set_title("NOBO Share Range Distribution")
+            ax.set_ylabel("Number of Holders")
+            st.pyplot(fig)
+        except Exception:
+            st.warning("📉 Could not render NOBO range chart.")
+
+    if 'Share Range' in summary_obo_df.columns and '# of Holders' in summary_obo_df.columns:
+        try:
+            fig, ax = plt.subplots()
+            summary_obo_df.plot(kind='bar', x='Share Range', y='# of Holders', ax=ax, color='lightgreen', legend=False)
+            ax.set_title("OBO Share Range Distribution")
+            ax.set_ylabel("Number of Holders")
+            st.pyplot(fig)
+        except Exception:
+            st.warning("📉 Could not render OBO range chart.")
 
     if ticker:
         st.subheader("📄 SEC Filing Intelligence")
@@ -135,5 +161,5 @@ if uploaded_file:
                 ax4.set_ylabel("Risky Filings")
                 ax4.set_xlabel("Week")
                 st.pyplot(fig4)
-            except Exception as e:
+            except Exception:
                 st.warning("Filing trendline unavailable due to date parse error.")
