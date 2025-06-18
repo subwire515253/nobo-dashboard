@@ -1,0 +1,7 @@
+streamlit
+pandas
+matplotlib
+requests
+beautifulsoup4
+fuzzywuzzy
+python-Levenshtein
