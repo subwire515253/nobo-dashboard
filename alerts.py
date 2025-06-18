@@ -1,41 +1,33 @@
-# alerts.py
-import pandas as pd
-from fuzzywuzzy import fuzz
-
-def match_names(nobo_df, sec_df, name_field="full_address", threshold=85):
-    matches = []
-    nobo_names = nobo_df[name_field].str.lower().fillna("")
-    for idx, row in sec_df.iterrows():
-        sec_name_field = str(row.get("url", "")).lower()
-        for nobo_name in nobo_names:
-            score = fuzz.partial_ratio(nobo_name, sec_name_field)
-            if score >= threshold:
-                matches.append({
-                    "nobo_name": nobo_name,
-                    "sec_url": sec_name_field,
-                    "match_score": score
-                })
-                break
-    return pd.DataFrame(matches)
 
 def generate_alerts(nobo_df, sec_data):
-    alerts = {}
+    def match_names(nobo_df, filings_dict):
+        name_field = "Full Address"
+        matches = []
+        for form, df in filings_dict.items():
+            if df.empty:
+                continue
+            sec_names = df["companyName"].str.lower().fillna("")
+            sec_dates = df["filingDate"]
+            for idx, row in nobo_df.iterrows():
+                name = str(row.get(name_field, "")).lower()
+                for sec_name, sec_date in zip(sec_names, sec_dates):
+                    if name[:10] in sec_name:
+                        matches.append((idx, form, sec_date))
+                        break
+        return matches
 
-    # Unlock Risk → S-1 and F-1 matches
-    resale_forms = pd.concat([sec_data.get("S-1", pd.DataFrame()), sec_data.get("F-1", pd.DataFrame())])
-    if not resale_forms.empty:
-        unlock_alerts = match_names(nobo_df, resale_forms)
-        if not unlock_alerts.empty:
-            alerts["🚨 PIPE Unlock Risk"] = unlock_alerts
+    matched = match_names(nobo_df, sec_data)
+    nobo_df["matched_filing"] = ""
+    nobo_df["matched_filing_date"] = ""
+    nobo_df["risk_flag"] = ""
 
-    # Insider Selling → Form 4s
-    form4 = sec_data.get("4", pd.DataFrame())
-    if not form4.empty:
-        alerts["🧨 Insider Activity (Form 4)"] = form4
-
-    # Activist Accumulation → SC 13D
-    sc13d = sec_data.get("SC 13D", pd.DataFrame())
-    if not sc13d.empty:
-        alerts["🏴 Activist Accumulation (SC 13D)"] = sc13d
-
-    return alerts
+    for idx, form, date in matched:
+        nobo_df.at[idx, "matched_filing"] = form
+        nobo_df.at[idx, "matched_filing_date"] = date
+        if form in ["S-1", "F-1"]:
+            nobo_df.at[idx, "risk_flag"] = "⚠️"
+        elif form == "4":
+            nobo_df.at[idx, "risk_flag"] = "🧨"
+        elif form == "SC 13D":
+            nobo_df.at[idx, "risk_flag"] = "🏴"
+    return nobo_df

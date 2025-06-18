@@ -1,59 +1,31 @@
-# nobo_parser.py
+
 import pandas as pd
-import re
-
-def classify_holder(name, shares):
-    name_lower = str(name).lower()
-    institutional_keywords = ["trust", "llc", "inc", "bank", "custodian", "ira", "corp", "fund", "capital", "partners"]
-    broker_keywords = ["charles schwab", "fidelity", "td ameritrade", "etrade", "robinhood"]
-
-    if any(kw in name_lower for kw in institutional_keywords):
-        return "Institutional"
-    elif any(kw in name_lower for kw in broker_keywords):
-        return "Retail Platform"
-    elif shares >= 100000:
-        return "Likely Institutional"
-    elif shares <= 25000:
-        return "Retail"
-    else:
-        return "Unclassified"
-
-def extract_zip(zip_val):
-    zip_str = str(zip_val)
-    match = re.search(r"\b(\d{5})\b", zip_str)
-    return match.group(1) if match else None
 
 def parse_nobo_file(uploaded_file):
-    # Target specific sheet used by Broadridge
-    sheet_name = "DigiAsia - Broadridge NOBO LIST"
-    df = pd.read_excel(uploaded_file, sheet_name=sheet_name, skiprows=4)
+    xls = pd.ExcelFile(uploaded_file)
+    if "DigiAsia - Broadridge NOBO LIST" not in xls.sheet_names:
+        raise ValueError("Expected sheet not found in uploaded file.")
 
-    # Assign proper column names
-    df.columns = [
-        "shares",
-        "name_line_1",
-        "name_line_2",
-        "name_line_3",
-        "name_line_4",
-        "name_line_5",
-        "name_line_6",
-        "name_line_7",
-        "zip_code"
-    ]
+    sheet = xls.parse("DigiAsia - Broadridge NOBO LIST", skiprows=1)
+    sheet = sheet.rename(columns=lambda x: str(x).strip())
 
-    # Clean and convert share values
-    df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
-    df = df.dropna(subset=["shares"])
+    sheet = sheet.rename(columns={
+        "Securityholder Name and Address": "Full Address",
+        "Total Shares Held": "Shares",
+        "Zip": "Zip Code",
+        "State": "State"
+    })
 
-    # Combine address lines
-    address_fields = [f"name_line_{i}" for i in range(1, 8)]
-    df["full_address"] = df[address_fields].astype(str).agg(" ".join, axis=1).str.strip()
+    sheet = sheet.dropna(subset=["Shares"])
+    sheet["Shares"] = pd.to_numeric(sheet["Shares"], errors="coerce")
+    sheet["Shares"] = sheet["Shares"].fillna(0).astype(int)
 
-    # Normalize ZIP code
-    df["zip_code"] = df["zip_code"].apply(extract_zip)
+    def tag_holder_type(address):
+        if pd.isna(address):
+            return "Unknown"
+        inst_keywords = ["LLC", "LP", "Capital", "Fund", "Advisors", "Partners", "Investments", "Asset", "Management", "Bank"]
+        return "Institutional" if any(k in address for k in inst_keywords) else "Retail"
 
-    # Classify holders
-    df["holder_type"] = df.apply(lambda row: classify_holder(row["full_address"], row["shares"]), axis=1)
+    sheet["holder_type"] = sheet["Full Address"].apply(tag_holder_type)
 
-    return df.rename(columns={"holder_type": "Holder Type"})[["full_address", "zip_code", "shares", "Holder Type"]]
-
+    return sheet
