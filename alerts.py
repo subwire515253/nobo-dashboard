@@ -1,1 +1,4 @@
-# Latest alerts.py that tags risk from matched names/filings...
+
+def generate_alerts(nobo_df, sec_data):
+    # Placeholder: Assume alerts are tagged by report_builder
+    return []
