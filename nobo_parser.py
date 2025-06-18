@@ -2,14 +2,14 @@
 import pandas as pd
 import re
 
-KEYWORDS_INSTITUTIONAL = ["trust", "llc", "inc", "bank", "custodian", "ira", "corp"]
-KEYWORDS_BROKERS = ["charles schwab", "fidelity", "td ameritrade", "etrade"]
-
 def classify_holder(name, shares):
     name_lower = str(name).lower()
-    if any(kw in name_lower for kw in KEYWORDS_INSTITUTIONAL):
+    institutional_keywords = ["trust", "llc", "inc", "bank", "custodian", "ira", "corp", "fund", "capital", "partners"]
+    broker_keywords = ["charles schwab", "fidelity", "td ameritrade", "etrade", "robinhood"]
+
+    if any(kw in name_lower for kw in institutional_keywords):
         return "Institutional"
-    elif any(kw in name_lower for kw in KEYWORDS_BROKERS):
+    elif any(kw in name_lower for kw in broker_keywords):
         return "Retail Platform"
     elif shares >= 100000:
         return "Likely Institutional"
@@ -18,35 +18,41 @@ def classify_holder(name, shares):
     else:
         return "Unclassified"
 
-def extract_zip(address):
-    match = re.search(r"\b(\d{5})(?:[-\s]\d{4})?\b", str(address))
+def extract_zip(zip_val):
+    zip_str = str(zip_val)
+    match = re.search(r"\b(\d{5})\b", zip_str)
     return match.group(1) if match else None
 
 def parse_nobo_file(uploaded_file):
-    xls = pd.ExcelFile(uploaded_file)
-    sheet = xls.parse(xls.sheet_names[0], skiprows=2)  # Use first sheet, skip Broadridge headers
-    sheet.columns = [str(c).strip().lower() for c in sheet.columns]
+    # Target specific sheet used by Broadridge
+    sheet_name = "DigiAsia - Broadridge NOBO LIST"
+    df = pd.read_excel(uploaded_file, sheet_name=sheet_name, skiprows=4)
 
-    # Dynamically find any column containing 'share'
-    share_col = next((col for col in sheet.columns if 'share' in col), None)
-    if not share_col:
-        raise ValueError(f"Could not locate a share column. Found columns: {sheet.columns.tolist()}")
+    # Assign proper column names
+    df.columns = [
+        "shares",
+        "name_line_1",
+        "name_line_2",
+        "name_line_3",
+        "name_line_4",
+        "name_line_5",
+        "name_line_6",
+        "name_line_7",
+        "zip_code"
+    ]
 
-    # Normalize and clean share values
-    sheet[share_col] = pd.to_numeric(sheet[share_col], errors='coerce')
-    sheet = sheet.dropna(subset=[share_col])
-    if sheet.empty:
-        raise ValueError(f"No valid share values found in column '{share_col}'. Please check your file.")
+    # Clean and convert share values
+    df["shares"] = pd.to_numeric(df["shares"], errors="coerce")
+    df = df.dropna(subset=["shares"])
 
-    # Build full address from all address lines
-    address_fields = [col for col in sheet.columns if "address" in col and "line" in col]
-    if not address_fields:
-        raise ValueError("Could not locate address columns.")
-    sheet["Full Address"] = sheet[address_fields].fillna("").agg(" ".join, axis=1).str.strip()
+    # Combine address lines
+    address_fields = [f"name_line_{i}" for i in range(1, 8)]
+    df["full_address"] = df[address_fields].astype(str).agg(" ".join, axis=1).str.strip()
 
-    # Extract zip and classify
-    sheet["Zip Code"] = sheet["Full Address"].apply(extract_zip)
-    sheet["Shares"] = sheet[share_col]
-    sheet["Holder Type"] = sheet.apply(lambda row: classify_holder(row["Full Address"], row["Shares"]), axis=1)
+    # Normalize ZIP code
+    df["zip_code"] = df["zip_code"].apply(extract_zip)
 
-    return sheet[["Full Address", "Zip Code", "Shares", "Holder Type"]].dropna(subset=["Shares"])
+    # Classify holders
+    df["holder_type"] = df.apply(lambda row: classify_holder(row["full_address"], row["shares"]), axis=1)
+
+    return df[["full_address", "zip_code", "shares", "holder_type"]].dropna(subset=["shares"])
