@@ -13,7 +13,7 @@ def plot_holder_distribution(df):
     st.pyplot(fig)
 
 def plot_zip_distribution(df):
-    zip_counts = df['Zip Code'].value_counts().head(10)
+    zip_counts = df['zip_code'].value_counts().head(10)
     fig, ax = plt.subplots()
     zip_counts.plot(kind='bar', ax=ax)
     ax.set_title('Top 10 ZIP Codes by Holder Count')
