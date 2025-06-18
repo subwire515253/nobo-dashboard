@@ -25,9 +25,23 @@ def extract_zip(address):
 def parse_nobo_file(uploaded_file):
     xls = pd.ExcelFile(uploaded_file)
     sheet = xls.parse("DigiAsia - Broadridge NOBO LIST", skiprows=2)
-    sheet = sheet.dropna(subset=["Total Shares Held"])
-    sheet["Full Address"] = sheet[["Name and Address Line 1", "Name and Address Line 2", "Name and Address Line 3"]].fillna("").agg(" ".join, axis=1).str.strip()
+
+    # Normalize column names
+    sheet.columns = [str(c).strip().lower() for c in sheet.columns]
+
+    # Attempt to find the share count column
+    share_col = None
+    for candidate in ["total shares held", "shares", "share count"]:
+        if candidate in sheet.columns:
+            share_col = candidate
+            break
+
+    if not share_col:
+        raise ValueError("Could not locate the share count column in uploaded file.")
+
+    sheet = sheet.dropna(subset=[share_col])
+    sheet["Full Address"] = sheet[["name and address line 1", "name and address line 2", "name and address line 3"]].fillna("").agg(" ".join, axis=1).str.strip()
     sheet["Zip Code"] = sheet["Full Address"].apply(extract_zip)
-    sheet["Shares"] = pd.to_numeric(sheet["Total Shares Held"], errors='coerce')
+    sheet["Shares"] = pd.to_numeric(sheet[share_col], errors='coerce')
     sheet["Holder Type"] = sheet.apply(lambda row: classify_holder(row["Full Address"], row["Shares"]), axis=1)
     return sheet[["Full Address", "Zip Code", "Shares", "Holder Type"]].dropna(subset=["Shares"])
