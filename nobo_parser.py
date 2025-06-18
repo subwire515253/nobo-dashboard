@@ -55,4 +55,5 @@ def parse_nobo_file(uploaded_file):
     # Classify holders
     df["holder_type"] = df.apply(lambda row: classify_holder(row["full_address"], row["shares"]), axis=1)
 
-    return df[["full_address", "zip_code", "shares", "holder_type"]].dropna(subset=["shares"])
+    return df.rename(columns={"holder_type": "Holder Type"})[["full_address", "zip_code", "shares", "Holder Type"]]
+
